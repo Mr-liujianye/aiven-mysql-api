@@ -11,10 +11,11 @@ DB_CONFIG = {
     "host": "mysql-51db351-curry-d6b4.i.aivencloud.com",
     "port": 21039,
     "user": "avnadmin",
-    "password": "AVNS_6Hq73KP_8kBwOVGpIof",
+    "password": "AVNS_90tKPf7s6mpw8-I1JUY",
     "database": "defaultdb",
     "charset": "utf8mb4",
     "cursorclass": pymysql.cursors.DictCursor
+    "auth_plugin": "mysql_native_password"  # 新增这一行
     # 完全删除 SSL 相关配置，让 pymysql 自动协商连接
 }
 
