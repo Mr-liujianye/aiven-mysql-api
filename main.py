@@ -6,7 +6,7 @@ import os
 
 app = FastAPI(title="Aiven MySQL 学生成绩 CRUD API", version="1.0")
 
-# ========== 数据库连接配置（不变） ==========
+# ========== 数据库连接配置（去掉 SSL 配置，适配全开放 IP） ==========
 DB_CONFIG = {
     "host": "mysql-51db351-curry-d6b4.i.aivencloud.com",
     "port": 21039,
@@ -14,8 +14,8 @@ DB_CONFIG = {
     "password": "AVNS_6Hq73KP_8kBwOVGpIof",
     "database": "defaultdb",
     "charset": "utf8mb4",
-    "cursorclass": pymysql.cursors.DictCursor,
-    "ssl": {"ca": None}
+    "cursorclass": pymysql.cursors.DictCursor
+    # 完全删除 SSL 相关配置，让 pymysql 自动协商连接
 }
 
 # ========== API 鉴权（不变） ==========
@@ -24,10 +24,10 @@ def verify_api_key(api_key: str = Header(None)):
         raise HTTPException(status_code=401, detail="无效的 API Key，请填写 your_secure_key_123")
     return api_key
 
-# ========== 数据模型（新增学号/工号字段） ==========
+# ========== 数据模型（含学号/工号字段） ==========
 class Student(BaseModel):
     name: str
-    student_no: str  # 新增：学号（纯数字）
+    student_no: str  # 学号（纯数字）
     score: int
     class_id: int
     teacher_id: int
@@ -35,9 +35,9 @@ class Student(BaseModel):
 class Teacher(BaseModel):
     name: str
     subject: str
-    teacher_no: str  # 新增：工号（T开头）
+    teacher_no: str  # 工号（T开头）
 
-# ========== 核心查询（新增权限过滤参数） ==========
+# ========== 核心查询（权限过滤） ==========
 @app.get("/api/students", summary="查询学生成绩（支持权限过滤）")
 def get_students(
     api_key: str = Depends(verify_api_key),
@@ -47,7 +47,7 @@ def get_students(
     try:
         connection = pymysql.connect(**DB_CONFIG)
         with connection.cursor() as cursor:
-            # 基础查询SQL（保留你的核心关联查询）
+            # 基础关联查询 SQL（保留你的核心逻辑）
             base_sql = """
                 SELECT s.id, s.name AS 学生, s.student_no AS 学号, s.score AS 成绩, 
                        c.name AS 班级, t.name AS 老师, t.teacher_no AS 老师工号
@@ -55,15 +55,15 @@ def get_students(
                 JOIN classes c ON s.class_id = c.id 
                 JOIN teachers t ON s.teacher_id = t.id
             """
-            # 权限过滤：学生查自己（传学号）
+            # 学生权限：仅查自己
             if student_no:
                 sql = f"{base_sql} WHERE s.student_no = %s"
                 cursor.execute(sql, (student_no,))
-            # 权限过滤：老师查授课班级（传工号）
+            # 老师权限：仅查授课班级
             elif teacher_no:
                 sql = f"{base_sql} WHERE t.teacher_no = %s"
                 cursor.execute(sql, (teacher_no,))
-            # 无过滤（仅测试用，智能体不会调用）
+            # 无过滤（测试用）
             else:
                 cursor.execute(base_sql)
             
@@ -75,7 +75,7 @@ def get_students(
         if 'connection' in locals() and connection.open:
             connection.close()
 
-# ========== 新增学生（适配学号字段） ==========
+# ========== 新增学生（适配学号） ==========
 @app.post("/api/students", summary="新增学生")
 def add_student(student: Student, api_key: str = Depends(verify_api_key)):
     try:
@@ -93,15 +93,18 @@ def add_student(student: Student, api_key: str = Depends(verify_api_key)):
         if 'connection' in locals() and connection.open:
             connection.close()
 
-# ========== 修改/删除学生（不变，按ID操作） ==========
+# ========== 修改学生成绩 ==========
 @app.put("/api/students/{student_id}", summary="修改学生成绩")
 def update_student_score(student_id: int, score: int, api_key: str = Depends(verify_api_key)):
     try:
         connection = pymysql.connect(**DB_CONFIG)
         with connection.cursor() as cursor:
+            # 检查学生是否存在
             cursor.execute("SELECT id FROM students WHERE id = %s", (student_id,))
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail="学生不存在")
+            
+            # 修改成绩
             cursor.execute("UPDATE students SET score = %s WHERE id = %s", (score, student_id))
         connection.commit()
         return {"code": 200, "data": {"学生ID": student_id, "新成绩": score}, "msg": "修改成功"}
@@ -113,14 +116,18 @@ def update_student_score(student_id: int, score: int, api_key: str = Depends(ver
         if 'connection' in locals() and connection.open:
             connection.close()
 
+# ========== 删除学生 ==========
 @app.delete("/api/students/{student_id}", summary="删除学生")
 def delete_student(student_id: int, api_key: str = Depends(verify_api_key)):
     try:
         connection = pymysql.connect(**DB_CONFIG)
         with connection.cursor() as cursor:
+            # 检查学生是否存在
             cursor.execute("SELECT id FROM students WHERE id = %s", (student_id,))
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail="学生不存在")
+            
+            # 删除学生
             cursor.execute("DELETE FROM students WHERE id = %s", (student_id,))
         connection.commit()
         return {"code": 200, "data": {"学生ID": student_id}, "msg": "删除成功"}
@@ -132,11 +139,12 @@ def delete_student(student_id: int, api_key: str = Depends(verify_api_key)):
         if 'connection' in locals() and connection.open:
             connection.close()
 
-# ========== 健康检查（不变） ==========
+# ========== 健康检查 ==========
 @app.get("/", summary="API 健康检查")
 def health_check():
     return {"message": "CRUD API 运行正常！访问 /docs 测试所有接口"}
 
+# ========== Render 启动配置 ==========
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
