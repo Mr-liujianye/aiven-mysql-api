@@ -6,16 +6,16 @@ import os
 # 初始化 FastAPI 应用
 app = FastAPI(title="Aiven MySQL 学生成绩查询 API", version="1.0")
 
-# ========== 你的 Aiven MySQL 连接配置（无需修改） ==========
+# ========== 你的 Aiven MySQL 连接配置（适配 Navicat 成功连接的参数） ==========
 DB_CONFIG = {
     "host": "mysql-51db351-curry-d6b4.i.aivencloud.com",
     "port": 21039,
     "user": "avnadmin",
-    "password": "AVNS_6Hq73KP_8kBwOVGpIof",
+    "password": "AVNS_6Hq73KP_8kBwOVGpIof",  # 和 Navicat 一致的密码
     "database": "defaultdb",
     "charset": "utf8mb4",
     "cursorclass": pymysql.cursors.DictCursor,  # 返回字典格式结果
-    "ssl": {"ssl_mode": "REQUIRED"}             # 适配 Aiven SSL 强制要求
+    "ssl": {"ca": None}  # 关键修复：适配 Aiven SSL（和 Navicat 连接参数一致）
 }
 
 # ========== API 鉴权（防止接口被恶意调用） ==========
@@ -25,11 +25,11 @@ def verify_api_key(api_key: str = Header(None)):
         raise HTTPException(status_code=401, detail="无效的 API Key，请填写 your_secure_key_123")
     return api_key
 
-# ========== 初始化数据库表和测试数据 ==========
+# ========== 初始化数据库表和测试数据（已在 Navicat 验证成功） ==========
 @app.post("/init_db", summary="创建班级/教师/学生表 + 插入测试数据")
 def init_database(api_key: str = Depends(verify_api_key)):
     try:
-        # 建立数据库连接
+        # 建立数据库连接（使用修复后的 SSL 配置）
         connection = pymysql.connect(**DB_CONFIG)
         with connection.cursor() as cursor:
             # 1. 创建班级表
@@ -62,7 +62,7 @@ def init_database(api_key: str = Depends(verify_api_key)):
                 )
             """)
             
-            # 4. 插入测试数据（IGNORE 避免重复插入）
+            # 4. 插入测试数据（IGNORE 避免重复插入，适配 Navicat 已有的数据）
             cursor.execute("INSERT IGNORE INTO classes (name) VALUES ('一年级一班')")
             cursor.execute("INSERT IGNORE INTO teachers (name, subject) VALUES ('张老师', '数学')")
             cursor.execute("INSERT IGNORE INTO students (name, score, class_id, teacher_id) VALUES ('小明', 98, 1, 1)")
@@ -78,13 +78,13 @@ def init_database(api_key: str = Depends(verify_api_key)):
         if 'connection' in locals() and connection.open:
             connection.close()
 
-# ========== 综合查询：学生+成绩+班级+老师 ==========
+# ========== 综合查询：学生+成绩+班级+老师（和你提供的 SQL 完全一致） ==========
 @app.get("/api/students", summary="查询学生成绩（关联班级/教师信息）")
 def get_student_scores(api_key: str = Depends(verify_api_key)):
     try:
         connection = pymysql.connect(**DB_CONFIG)
         with connection.cursor() as cursor:
-            # 执行你提供的关联查询 SQL
+            # 执行你提供的关联查询 SQL（Navicat 已验证能查到结果）
             cursor.execute("""
                 SELECT s.name AS 学生, s.score AS 成绩, c.name AS 班级, t.name AS 老师 
                 FROM students s 
